@@ -1,33 +1,138 @@
 import BottomTabBar from "@/components/BottomTabBar";
-import { Shield, Copy, ArrowRight, Image, Video, Link2 } from "lucide-react";
-import { useState } from "react";
+import ScanResultModal from "@/components/ScanResultModal";
+import { Shield, Copy, ArrowRight, Image, Video, Link2, Mic } from "lucide-react";
+import { useState, useRef } from "react";
+import { scanLink, scanImage, scanVideo, scanAudio, ScanResult } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [url, setUrl] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { toast } = useToast();
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const handlePasteLink = async () => {
     try {
       const text = await navigator.clipboard.readText();
       setUrl(text);
     } catch (err) {
-      console.log("Failed to read clipboard");
+      toast({
+        title: "Clipboard access denied",
+        description: "Please paste the URL manually",
+        variant: "destructive",
+      });
     }
   };
 
-  const handleAnalyze = () => {
-    if (url.trim()) {
-      console.log("Analyzing URL:", url);
-      // TODO: Implement analysis
+  const handleAnalyzeLink = async () => {
+    if (!url.trim()) return;
+    
+    setIsLoading(true);
+    setError(null);
+    setResult(null);
+    setIsModalOpen(true);
+
+    try {
+      const scanResult = await scanLink(url);
+      setResult(scanResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to analyze link");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/)) {
+      toast({ title: "Invalid format", description: "Please upload JPG, PNG, or WEBP", variant: "destructive" });
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setResult(null);
+    setIsModalOpen(true);
+
+    try {
+      const scanResult = await scanImage(file);
+      setResult(scanResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to scan image");
+    } finally {
+      setIsLoading(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().match(/\.(mp4|mov|avi)$/)) {
+      toast({ title: "Invalid format", description: "Please upload MP4, MOV, or AVI", variant: "destructive" });
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setResult(null);
+    setIsModalOpen(true);
+
+    try {
+      const scanResult = await scanVideo(file);
+      setResult(scanResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to scan video");
+    } finally {
+      setIsLoading(false);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  };
+
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().match(/\.(mp3|wav|m4a|aac|ogg)$/)) {
+      toast({ title: "Invalid format", description: "Please upload MP3, WAV, M4A, AAC, or OGG", variant: "destructive" });
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setResult(null);
+    setIsModalOpen(true);
+
+    try {
+      const scanResult = await scanAudio(file);
+      setResult(scanResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to scan audio");
+    } finally {
+      setIsLoading(false);
+      if (audioInputRef.current) audioInputRef.current.value = "";
     }
   };
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      {/* Hidden file inputs */}
+      <input ref={imageInputRef} type="file" accept=".jpg,.jpeg,.png,.webp" className="hidden" onChange={handleImageUpload} />
+      <input ref={videoInputRef} type="file" accept=".mp4,.mov,.avi" className="hidden" onChange={handleVideoUpload} />
+      <input ref={audioInputRef} type="file" accept=".mp3,.wav,.m4a,.aac,.ogg" className="hidden" onChange={handleAudioUpload} />
+
       {/* Header */}
       <div className="px-4 pt-12 pb-6 flex items-center gap-3">
-        <div className="relative">
-          <Shield className="h-8 w-8 text-primary" />
-        </div>
+        <Shield className="h-8 w-8 text-primary" />
         <h1 className="text-xl font-bold text-foreground">Home</h1>
       </div>
 
@@ -38,9 +143,8 @@ const Index = () => {
             <Link2 className="h-6 w-6 text-white" />
           </div>
           <h2 className="text-xl font-bold text-white mb-2">Paste Link to Analyze</h2>
-          <p className="text-sm text-white/70 mb-4">Or share directly from social media apps</p>
+          <p className="text-sm text-white/70 mb-4">YouTube, Instagram, TikTok, Facebook & more</p>
           
-          {/* URL Input Field */}
           <div className="mb-4">
             <input
               type="url"
@@ -60,8 +164,8 @@ const Index = () => {
               Paste
             </button>
             <button
-              onClick={handleAnalyze}
-              disabled={!url.trim()}
+              onClick={handleAnalyzeLink}
+              disabled={!url.trim() || isLoading}
               className="flex-1 py-3 rounded-xl bg-white text-accent font-medium flex items-center justify-center gap-2 hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Analyze
@@ -75,22 +179,46 @@ const Index = () => {
       <div className="px-4">
         <p className="text-center text-muted-foreground text-sm mb-4">Or upload directly</p>
         
-        <div className="grid grid-cols-2 gap-4">
-          <div className="glass-card p-6 flex flex-col items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center">
-              <Image className="h-6 w-6 text-primary" />
+        <div className="grid grid-cols-3 gap-3">
+          <button
+            onClick={() => imageInputRef.current?.click()}
+            className="glass-card p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-primary/30 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+              <Image className="h-5 w-5 text-primary" />
             </div>
-            <span className="text-sm font-medium text-foreground">Upload Image</span>
-          </div>
+            <span className="text-xs font-medium text-foreground">Image</span>
+          </button>
           
-          <div className="glass-card p-6 flex flex-col items-center gap-3 cursor-pointer hover:border-success/30 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center">
-              <Video className="h-6 w-6 text-success" />
+          <button
+            onClick={() => videoInputRef.current?.click()}
+            className="glass-card p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-success/30 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+              <Video className="h-5 w-5 text-success" />
             </div>
-            <span className="text-sm font-medium text-foreground">Upload Video</span>
-          </div>
+            <span className="text-xs font-medium text-foreground">Video</span>
+          </button>
+
+          <button
+            onClick={() => audioInputRef.current?.click()}
+            className="glass-card p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-warning/30 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+              <Mic className="h-5 w-5 text-warning" />
+            </div>
+            <span className="text-xs font-medium text-foreground">Audio</span>
+          </button>
         </div>
       </div>
+
+      <ScanResultModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        isLoading={isLoading}
+        result={result}
+        error={error}
+      />
 
       <BottomTabBar />
     </div>
