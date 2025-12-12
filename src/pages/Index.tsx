@@ -1,9 +1,11 @@
 import BottomTabBar from "@/components/BottomTabBar";
 import ScanResultModal from "@/components/ScanResultModal";
 import { Shield, Copy, ArrowRight, Image, Video, Link2, Mic } from "lucide-react";
-import { useState, useRef } from "react";
-import { scanLink, scanImage, scanVideo, scanAudio, ScanResult } from "@/lib/api";
+import { useState, useRef, useCallback } from "react";
+import { scanLink, scanImage, scanVideo, scanAudio, ScanResult, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+
+type ScanType = "link" | "image" | "video" | "audio";
 
 const Index = () => {
   const [url, setUrl] = useState("");
@@ -11,6 +13,9 @@ const Index = () => {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isNetworkError, setIsNetworkError] = useState(false);
+  const [lastScanType, setLastScanType] = useState<ScanType | null>(null);
+  const [lastFile, setLastFile] = useState<File | null>(null);
   const { toast } = useToast();
 
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -21,6 +26,7 @@ const Index = () => {
     try {
       const text = await navigator.clipboard.readText();
       setUrl(text);
+      console.log("[UI] Pasted URL:", text);
     } catch (err) {
       toast({
         title: "Clipboard access denied",
@@ -30,25 +36,68 @@ const Index = () => {
     }
   };
 
-  const handleAnalyzeLink = async () => {
-    if (!url.trim()) return;
-    
+  const performScan = useCallback(async (type: ScanType, file?: File) => {
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setIsNetworkError(false);
     setIsModalOpen(true);
+    setLastScanType(type);
+    if (file) setLastFile(file);
+
+    console.log(`[Scan] Starting ${type} scan...`);
 
     try {
-      const scanResult = await scanLink(url);
+      let scanResult: ScanResult;
+      
+      switch (type) {
+        case "link":
+          scanResult = await scanLink(url);
+          break;
+        case "image":
+          if (!file) throw new Error("No file provided");
+          scanResult = await scanImage(file);
+          break;
+        case "video":
+          if (!file) throw new Error("No file provided");
+          scanResult = await scanVideo(file);
+          break;
+        case "audio":
+          if (!file) throw new Error("No file provided");
+          scanResult = await scanAudio(file);
+          break;
+      }
+      
       setResult(scanResult);
+      console.log(`[Scan] ${type} scan completed successfully`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to analyze link");
+      const isNetwork = err instanceof ApiError && err.isNetworkError;
+      setIsNetworkError(isNetwork);
+      setError(err instanceof Error ? err.message : "Failed to analyze");
+      console.error(`[Scan] ${type} scan failed:`, err);
     } finally {
       setIsLoading(false);
     }
+  }, [url]);
+
+  const handleRetry = useCallback(() => {
+    if (!lastScanType) return;
+    
+    console.log(`[Retry] Retrying ${lastScanType} scan...`);
+    
+    if (lastScanType === "link") {
+      performScan("link");
+    } else if (lastFile) {
+      performScan(lastScanType, lastFile);
+    }
+  }, [lastScanType, lastFile, performScan]);
+
+  const handleAnalyzeLink = () => {
+    if (!url.trim()) return;
+    performScan("link");
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -57,23 +106,12 @@ const Index = () => {
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-    setResult(null);
-    setIsModalOpen(true);
-
-    try {
-      const scanResult = await scanImage(file);
-      setResult(scanResult);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to scan image");
-    } finally {
-      setIsLoading(false);
-      if (imageInputRef.current) imageInputRef.current.value = "";
-    }
+    console.log(`[Upload] Image selected: ${file.name}`);
+    performScan("image", file);
+    if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -82,23 +120,12 @@ const Index = () => {
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-    setResult(null);
-    setIsModalOpen(true);
-
-    try {
-      const scanResult = await scanVideo(file);
-      setResult(scanResult);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to scan video");
-    } finally {
-      setIsLoading(false);
-      if (videoInputRef.current) videoInputRef.current.value = "";
-    }
+    console.log(`[Upload] Video selected: ${file.name}`);
+    performScan("video", file);
+    if (videoInputRef.current) videoInputRef.current.value = "";
   };
 
-  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -107,20 +134,9 @@ const Index = () => {
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-    setResult(null);
-    setIsModalOpen(true);
-
-    try {
-      const scanResult = await scanAudio(file);
-      setResult(scanResult);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to scan audio");
-    } finally {
-      setIsLoading(false);
-      if (audioInputRef.current) audioInputRef.current.value = "";
-    }
+    console.log(`[Upload] Audio selected: ${file.name}`);
+    performScan("audio", file);
+    if (audioInputRef.current) audioInputRef.current.value = "";
   };
 
   return (
@@ -218,6 +234,8 @@ const Index = () => {
         isLoading={isLoading}
         result={result}
         error={error}
+        onRetry={handleRetry}
+        isNetworkError={isNetworkError}
       />
 
       <BottomTabBar />

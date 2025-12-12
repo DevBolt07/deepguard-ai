@@ -9,65 +9,104 @@ export interface ScanResult {
   details?: Record<string, number>;
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public statusCode?: number, public isNetworkError?: boolean) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+const handleResponse = async (response: Response, endpoint: string): Promise<ScanResult> => {
+  if (!response.ok) {
+    console.error(`[API Error] ${endpoint} failed with status ${response.status}`);
+    throw new ApiError(`Server error: ${response.status}`, response.status);
+  }
+  
+  const data = await response.json();
+  console.log(`[API Success] ${endpoint} response:`, data);
+  return data;
+};
+
+const handleFetchError = (error: unknown, endpoint: string): never => {
+  console.error(`[API Error] ${endpoint} request failed:`, error);
+  
+  if (error instanceof ApiError) {
+    throw error;
+  }
+  
+  if (error instanceof TypeError && error.message.includes("fetch")) {
+    throw new ApiError("Cannot connect to backend. Please ensure the server is running on localhost:8000", undefined, true);
+  }
+  
+  throw new ApiError(error instanceof Error ? error.message : "Unknown error occurred");
+};
+
 export const scanImage = async (file: File): Promise<ScanResult> => {
+  const endpoint = "/image/scan";
+  console.log(`[API] Uploading image: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+  
   const formData = new FormData();
   formData.append("file", file);
   
-  const response = await fetch(`${API_BASE_URL}/image/scan`, {
-    method: "POST",
-    body: formData,
-  });
-  
-  if (!response.ok) {
-    throw new Error("Failed to scan image");
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: "POST",
+      body: formData,
+    });
+    return handleResponse(response, endpoint);
+  } catch (error) {
+    return handleFetchError(error, endpoint);
   }
-  
-  return response.json();
 };
 
 export const scanVideo = async (file: File): Promise<ScanResult> => {
+  const endpoint = "/video/scan";
+  console.log(`[API] Uploading video: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+  
   const formData = new FormData();
   formData.append("file", file);
   
-  const response = await fetch(`${API_BASE_URL}/video/scan`, {
-    method: "POST",
-    body: formData,
-  });
-  
-  if (!response.ok) {
-    throw new Error("Failed to scan video");
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: "POST",
+      body: formData,
+    });
+    return handleResponse(response, endpoint);
+  } catch (error) {
+    return handleFetchError(error, endpoint);
   }
-  
-  return response.json();
 };
 
 export const scanAudio = async (file: File): Promise<ScanResult> => {
+  const endpoint = "/audio/scan";
+  console.log(`[API] Uploading audio: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+  
   const formData = new FormData();
   formData.append("file", file);
   
-  const response = await fetch(`${API_BASE_URL}/audio/scan`, {
-    method: "POST",
-    body: formData,
-  });
-  
-  if (!response.ok) {
-    throw new Error("Failed to scan audio");
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: "POST",
+      body: formData,
+    });
+    return handleResponse(response, endpoint);
+  } catch (error) {
+    return handleFetchError(error, endpoint);
   }
-  
-  return response.json();
 };
 
 export const scanLink = async (url: string): Promise<ScanResult> => {
-  const response = await fetch(
-    `${API_BASE_URL}/link/scan?url=${encodeURIComponent(url)}`,
-    { method: "POST" }
-  );
+  const endpoint = `/link/scan?url=${encodeURIComponent(url)}`;
+  console.log(`[API] Scanning URL: ${url}`);
   
-  if (!response.ok) {
-    throw new Error("Failed to scan link");
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: "POST",
+    });
+    return handleResponse(response, `/link/scan`);
+  } catch (error) {
+    return handleFetchError(error, "/link/scan");
   }
-  
-  return response.json();
 };
 
 export const getProbabilityColor = (probability: number): "safe" | "suspicious" | "danger" => {
