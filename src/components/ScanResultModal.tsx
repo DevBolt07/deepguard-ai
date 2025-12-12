@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ScanResult, getProbabilityColor } from "@/lib/api";
-import { ShieldCheck, ShieldAlert, ShieldX, Loader2 } from "lucide-react";
+import { ScanResult, getProbabilityColor, ApiError } from "@/lib/api";
+import { ShieldCheck, ShieldAlert, ShieldX, Loader2, RefreshCw, WifiOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface ScanResultModalProps {
   isOpen: boolean;
@@ -8,9 +9,11 @@ interface ScanResultModalProps {
   isLoading: boolean;
   result: ScanResult | null;
   error: string | null;
+  onRetry?: () => void;
+  isNetworkError?: boolean;
 }
 
-const ScanResultModal = ({ isOpen, onClose, isLoading, result, error }: ScanResultModalProps) => {
+const ScanResultModal = ({ isOpen, onClose, isLoading, result, error, onRetry, isNetworkError }: ScanResultModalProps) => {
   const probability = result?.deepfake_probability ?? result?.voice_clone_probability ?? 0;
   const colorType = getProbabilityColor(probability);
   
@@ -45,7 +48,7 @@ const ScanResultModal = ({ isOpen, onClose, isLoading, result, error }: ScanResu
       <DialogContent className="bg-card border-border max-w-md">
         <DialogHeader>
           <DialogTitle className="text-foreground text-center">
-            {isLoading ? "Analyzing..." : "Scan Results"}
+            {isLoading ? "Analyzing..." : error ? "Error" : "Scan Results"}
           </DialogTitle>
         </DialogHeader>
 
@@ -59,9 +62,37 @@ const ScanResultModal = ({ isOpen, onClose, isLoading, result, error }: ScanResu
 
         {error && !isLoading && (
           <div className="flex flex-col items-center py-8 gap-4">
-            <ShieldX className="h-16 w-16 text-destructive" />
-            <p className="text-destructive font-medium">Analysis Failed</p>
-            <p className="text-sm text-muted-foreground text-center">{error}</p>
+            {isNetworkError ? (
+              <WifiOff className="h-16 w-16 text-destructive" />
+            ) : (
+              <ShieldX className="h-16 w-16 text-destructive" />
+            )}
+            <p className="text-destructive font-medium">
+              {isNetworkError ? "Connection Failed" : "Analysis Failed"}
+            </p>
+            <p className="text-sm text-muted-foreground text-center px-4">{error}</p>
+            
+            {onRetry && (
+              <Button 
+                onClick={onRetry} 
+                variant="outline" 
+                className="mt-2 gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Try Again
+              </Button>
+            )}
+            
+            {isNetworkError && (
+              <div className="mt-4 p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground">
+                <p className="font-medium mb-1">Troubleshooting:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Ensure backend is running on localhost:8000</li>
+                  <li>Check your terminal for server errors</li>
+                  <li>Run: python -m uvicorn app.main:app --reload</li>
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
