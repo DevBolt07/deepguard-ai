@@ -1,8 +1,14 @@
+
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 boto3
-torch
-torchvision
-onnxruntime
 requests
+
+# ML (CPU only)
+torch==2.9.1+cpu
+torchvision==0.24.1+cpu
+onnxruntime
+
+# Link extraction
+yt-dlp

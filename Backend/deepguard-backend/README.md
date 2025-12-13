@@ -4,9 +4,34 @@
 http://localhost:8000
 ```
 {Note : Before running backend make sure  to ceate virtual enviroment and download requirements
+1️⃣ Go to backend directory
+cd Backend\deepguard-backend
+
+2️⃣ Create virtual environment (one time only)
 python -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
+
+3️⃣ Activate virtual environment
+venv\Scripts\activate
+
+
+You should now see:
+
+(venv)
+
+4️⃣ Install dependencies (CPU-only, no GPU)
+pip install --upgrade pip
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+
+
+5️⃣ Run the FastAPI backend
+uvicorn app.main:app --reload
+
+6️⃣ Backend running successfully 🎉
+
+You should see:
+
+Uvicorn running on http://127.0.0.1:8000
 }
 
 # ✅ **1. Upload Image for Deepfake Detection**
