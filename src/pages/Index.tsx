@@ -1,11 +1,12 @@
 import BottomTabBar from "@/components/BottomTabBar";
 import ScanResultModal from "@/components/ScanResultModal";
-import { Shield, Copy, ArrowRight, Image, Video, Link2, Mic } from "lucide-react";
-import { useState, useRef, useCallback } from "react";
+import { Shield, Copy, ArrowRight, Image, Video, Link2, Mic, Upload } from "lucide-react";
+import { useState, useRef, useCallback, DragEvent } from "react";
 import { scanLink, scanImage, scanVideo, scanAudio, ScanResult, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 type ScanType = "link" | "image" | "video" | "audio";
+type DragTarget = "image" | "video" | "audio" | null;
 
 const Index = () => {
   const [url, setUrl] = useState("");
@@ -16,6 +17,7 @@ const Index = () => {
   const [isNetworkError, setIsNetworkError] = useState(false);
   const [lastScanType, setLastScanType] = useState<ScanType | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState<DragTarget>(null);
   const { toast } = useToast();
 
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -97,46 +99,88 @@ const Index = () => {
     performScan("link");
   };
 
+  const validateAndProcessFile = useCallback((file: File, type: "image" | "video" | "audio") => {
+    const validations = {
+      image: { pattern: /\.(jpg|jpeg|png|webp)$/i, formats: "JPG, PNG, or WEBP" },
+      video: { pattern: /\.(mp4|mov|avi)$/i, formats: "MP4, MOV, or AVI" },
+      audio: { pattern: /\.(mp3|wav|m4a|aac|ogg)$/i, formats: "MP3, WAV, M4A, AAC, or OGG" },
+    };
+
+    const { pattern, formats } = validations[type];
+    
+    if (!file.name.toLowerCase().match(pattern)) {
+      toast({ title: "Invalid format", description: `Please upload ${formats}`, variant: "destructive" });
+      return false;
+    }
+
+    console.log(`[Upload] ${type} selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+    performScan(type, file);
+    return true;
+  }, [performScan, toast]);
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!file.name.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/)) {
-      toast({ title: "Invalid format", description: "Please upload JPG, PNG, or WEBP", variant: "destructive" });
-      return;
-    }
-
-    console.log(`[Upload] Image selected: ${file.name}`);
-    performScan("image", file);
+    validateAndProcessFile(file, "image");
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!file.name.toLowerCase().match(/\.(mp4|mov|avi)$/)) {
-      toast({ title: "Invalid format", description: "Please upload MP4, MOV, or AVI", variant: "destructive" });
-      return;
-    }
-
-    console.log(`[Upload] Video selected: ${file.name}`);
-    performScan("video", file);
+    validateAndProcessFile(file, "video");
     if (videoInputRef.current) videoInputRef.current.value = "";
   };
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    validateAndProcessFile(file, "audio");
+    if (audioInputRef.current) audioInputRef.current.value = "";
+  };
 
-    if (!file.name.toLowerCase().match(/\.(mp3|wav|m4a|aac|ogg)$/)) {
-      toast({ title: "Invalid format", description: "Please upload MP3, WAV, M4A, AAC, or OGG", variant: "destructive" });
+  const handleDragOver = (e: DragEvent<HTMLDivElement>, target: DragTarget) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(target);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(null);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>, type: "image" | "video" | "audio") => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(null);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) {
+      toast({ title: "No file detected", description: "Please drop a valid file", variant: "destructive" });
       return;
     }
 
-    console.log(`[Upload] Audio selected: ${file.name}`);
-    performScan("audio", file);
-    if (audioInputRef.current) audioInputRef.current.value = "";
+    console.log(`[Drop] File dropped on ${type} zone: ${file.name}`);
+    validateAndProcessFile(file, type);
+  };
+
+  const getDropZoneClasses = (type: DragTarget) => {
+    const baseClasses = "glass-card p-4 flex flex-col items-center gap-2 cursor-pointer transition-all duration-200";
+    const isActive = dragOver === type;
+    
+    if (isActive) {
+      return `${baseClasses} border-2 border-dashed border-primary bg-primary/10 scale-105`;
+    }
+    
+    const hoverClasses = {
+      image: "hover:border-primary/30",
+      video: "hover:border-success/30",
+      audio: "hover:border-warning/30",
+    };
+    
+    return `${baseClasses} ${type ? hoverClasses[type] : ""}`;
   };
 
   return (
@@ -193,38 +237,74 @@ const Index = () => {
 
       {/* Or Upload Directly */}
       <div className="px-4">
-        <p className="text-center text-muted-foreground text-sm mb-4">Or upload directly</p>
+        <p className="text-center text-muted-foreground text-sm mb-4">Or drag & drop files below</p>
         
         <div className="grid grid-cols-3 gap-3">
-          <button
+          {/* Image Drop Zone */}
+          <div
             onClick={() => imageInputRef.current?.click()}
-            className="glass-card p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-primary/30 transition-colors"
+            onDragOver={(e) => handleDragOver(e, "image")}
+            onDragEnter={(e) => handleDragOver(e, "image")}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, "image")}
+            className={getDropZoneClasses("image")}
           >
             <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-              <Image className="h-5 w-5 text-primary" />
+              {dragOver === "image" ? (
+                <Upload className="h-5 w-5 text-primary animate-bounce" />
+              ) : (
+                <Image className="h-5 w-5 text-primary" />
+              )}
             </div>
-            <span className="text-xs font-medium text-foreground">Image</span>
-          </button>
+            <span className="text-xs font-medium text-foreground">
+              {dragOver === "image" ? "Drop here" : "Image"}
+            </span>
+            <span className="text-[10px] text-muted-foreground">JPG, PNG, WEBP</span>
+          </div>
           
-          <button
+          {/* Video Drop Zone */}
+          <div
             onClick={() => videoInputRef.current?.click()}
-            className="glass-card p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-success/30 transition-colors"
+            onDragOver={(e) => handleDragOver(e, "video")}
+            onDragEnter={(e) => handleDragOver(e, "video")}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, "video")}
+            className={getDropZoneClasses("video")}
           >
             <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-              <Video className="h-5 w-5 text-success" />
+              {dragOver === "video" ? (
+                <Upload className="h-5 w-5 text-success animate-bounce" />
+              ) : (
+                <Video className="h-5 w-5 text-success" />
+              )}
             </div>
-            <span className="text-xs font-medium text-foreground">Video</span>
-          </button>
+            <span className="text-xs font-medium text-foreground">
+              {dragOver === "video" ? "Drop here" : "Video"}
+            </span>
+            <span className="text-[10px] text-muted-foreground">MP4, MOV, AVI</span>
+          </div>
 
-          <button
+          {/* Audio Drop Zone */}
+          <div
             onClick={() => audioInputRef.current?.click()}
-            className="glass-card p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-warning/30 transition-colors"
+            onDragOver={(e) => handleDragOver(e, "audio")}
+            onDragEnter={(e) => handleDragOver(e, "audio")}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, "audio")}
+            className={getDropZoneClasses("audio")}
           >
             <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-              <Mic className="h-5 w-5 text-warning" />
+              {dragOver === "audio" ? (
+                <Upload className="h-5 w-5 text-warning animate-bounce" />
+              ) : (
+                <Mic className="h-5 w-5 text-warning" />
+              )}
             </div>
-            <span className="text-xs font-medium text-foreground">Audio</span>
-          </button>
+            <span className="text-xs font-medium text-foreground">
+              {dragOver === "audio" ? "Drop here" : "Audio"}
+            </span>
+            <span className="text-[10px] text-muted-foreground">MP3, WAV, M4A</span>
+          </div>
         </div>
       </div>
 
